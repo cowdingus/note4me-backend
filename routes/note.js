@@ -11,7 +11,15 @@ router.get("/list", auth, async (req, res) => {
 	try {
 		const notebook = await Notebook.findOne({ownerId: req.user.id}, "notes");
 
+		// Ensure notebook existence
+		if (!notebook) {
+			res.status(400).send("No such notebook with that user id was found");
+			return;
+		}
+
+		// Send the list of notes
 		res.status(200).json(notebook.notes);
+
 	} catch (e) {
 		console.error(e.message);
 		res.status(500).send("Error in fetching notes");
@@ -24,12 +32,23 @@ router.get("/:cardId", auth, async (req, res) => {
 	try {
 		const notebook = await Notebook.findOne({ownerId: req.user.id});
 
-		if (notebook.notes.has(cardId)) {
-			res.status(200).json(notebook.notes.get(cardId));
+		// Ensure notebook existence
+		if (!notebook) {
+			res.status(400).send("No such notebook with that user id was found");
 			return;
 		}
 
-		res.status(404).json({message: "Can't find the card with that id"});
+		const note = notebook.notes.get(cardId);
+
+		// Check note existence
+		if (!note) {
+			res.status(404).json({message: "Can't find the note with that id"});
+			return;
+		}
+
+		// Send the note
+		res.status(200).json(notebook.notes.get(cardId));
+
 	} catch (e) {
 		console.error(e.message);
 		res.status(500).send("Error in retrieving requested note");
@@ -42,15 +61,25 @@ router.delete("/:cardId", auth, async (req, res) => {
 	try {
 		const notebook = await Notebook.findOne({ownerId: req.user.id});
 
-		if (await notebook.notes.has(cardId))
-		{
-			await notebook.notes.delete(req.params.cardId);
-			await notebook.save();
-			res.status(200).json({message: "Note deletion successful"});
+		// Ensure notebook existence
+		if (!notebook) {
+			res.status(404).send("No such notebook with that user id was found");
 			return;
 		}
 
-		res.status(404).json({message: "Note such note was found with that id"});
+		const note = notebook.notes.get(cardId);
+
+		// Ensure note existence
+		if (!note) {
+			res.status(404).json({message: "Note such note was found with that id"});
+			return;
+		}
+
+		// Delete the note
+		await notebook.notes.delete(cardId);
+
+		await notebook.save();
+		res.status(204).end();
 
 	} catch (e) {
 		console.error(e.message);
@@ -66,6 +95,7 @@ router.post(
 		check("content", "Content must be filled").exists()
 	],
 	async (req, res) => {
+		// Check argument completeness
 		const errors = validationResult(req);
 
 		if (!errors.isEmpty())
@@ -79,19 +109,69 @@ router.post(
 		const {title, content} = req.body;
 
 		try {
+			// Create notebook if not exists
 			const notebook = await Notebook.exists({ownerId: userId}) ?
 				await Notebook.findOne({ownerId: userId}) :
 				await Notebook.create({ownerId: userId, notes: {}});
 
+			// Push the note to notebook.notes
 			notebook.notes.set((notebook.lastId++).toString(), {title, content});
 			await notebook.save();
 
-			res.status(200).json({
-				message: "Note insertion successful"
-			});
+			res.status(204).end();
 		} catch (e) {
 			console.log(e.message);
 			res.status(500).send("Error in inserting requested note");
+		}
+	}
+);
+
+router.patch(
+	"/:cardId",
+	auth,
+	async (req, res) => {
+		const userId = req.user.id;
+		const cardId = req.params.cardId.toString();
+		const {title, content} = req.body;
+
+		// Check argument completeness
+		if (!title && !content) {
+			res.status(204).end();
+		}
+
+		try {
+			const notebook = await Notebook.findOne({ownerId: userId});
+
+			// Ensure notebook existence
+			if (!notebook) {
+				res.status(404).send("No such notebook with that user id was found");
+				return;
+			}
+
+			const note = notebook.notes.get(cardId);
+
+			// Check note existence
+			if (!note) {
+				res.status(400).send("No such note with that id was found");
+				return;
+			}
+
+			// Update note
+			if (title) {
+				note.title = title;
+			}
+
+			if (content) {
+				note.content = content;
+			}
+
+			await notebook.save();
+
+			res.status(200).send("Note patched");
+
+		} catch (e) {
+			console.log(e.message);
+			res.status(500).send("Error in patching requested note");
 		}
 	}
 );
