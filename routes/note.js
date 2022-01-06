@@ -38,7 +38,7 @@ router.get("/:cardId", auth, async (req, res) => {
 			return;
 		}
 
-		const note = notebook.notes.get(cardId);
+		const note = notebook.notes.find(note => note.id == cardId);
 
 		// Check note existence
 		if (!note) {
@@ -47,7 +47,7 @@ router.get("/:cardId", auth, async (req, res) => {
 		}
 
 		// Send the note
-		res.status(200).json(notebook.notes.get(cardId));
+		res.status(200).json(note);
 
 	} catch (e) {
 		console.error(e.message);
@@ -67,7 +67,7 @@ router.delete("/:cardId", auth, async (req, res) => {
 			return;
 		}
 
-		const note = notebook.notes.get(cardId);
+		const note = notebook.notes.find(note => note.id == cardId);
 
 		// Ensure note existence
 		if (!note) {
@@ -76,7 +76,7 @@ router.delete("/:cardId", auth, async (req, res) => {
 		}
 
 		// Delete the note
-		await notebook.notes.delete(cardId);
+		notebook.notes = notebook.notes.filter(note => note.id != cardId);
 
 		await notebook.save();
 		res.status(204).end();
@@ -112,10 +112,10 @@ router.post(
 			// Create notebook if not exists
 			const notebook = await Notebook.exists({ownerId: userId}) ?
 				await Notebook.findOne({ownerId: userId}) :
-				await Notebook.create({ownerId: userId, notes: {}});
+				await Notebook.create({ownerId: userId, notes: []});
 
 			// Push the note to notebook.notes
-			notebook.notes.set((notebook.lastId++).toString(), {title, content});
+			await notebook.notes.push({id: notebook.lastId++, title, content});
 			await notebook.save();
 
 			res.status(204).end();
@@ -148,7 +148,7 @@ router.patch(
 				return;
 			}
 
-			const note = notebook.notes.get(cardId);
+			const note = notebook.notes.find(note => note.id == cardId);
 
 			// Check note existence
 			if (!note) {
