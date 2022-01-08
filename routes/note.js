@@ -106,7 +106,11 @@ router.post(
 		}
 
 		const userId = req.user.id;
-		const {title, content} = req.body;
+		const {title, content, tags, priority} = req.body;
+
+		let parsedTags = [];
+
+		if (tags) parsedTags = parseTags(tags);
 
 		try {
 			// Create notebook if not exists
@@ -115,7 +119,13 @@ router.post(
 				await Notebook.create({ownerId: userId, notes: []});
 
 			// Push the note to notebook.notes
-			await notebook.notes.push({id: notebook.lastId++, title, content});
+			await notebook.notes.push({
+				id: notebook.lastId++,
+				title,
+				content,
+				tags: parsedTags ?? [],
+				priority: priority ?? 0
+			});
 			await notebook.save();
 
 			res.status(204).end();
@@ -132,11 +142,12 @@ router.patch(
 	async (req, res) => {
 		const userId = req.user.id;
 		const cardId = req.params.cardId.toString();
-		const {title, content} = req.body;
+		const {title, content, tags, priority} = req.body;
 
 		// Check argument completeness
-		if (!title && !content) {
+		if (!title && !content && !tags && !priority) {
 			res.status(204).end();
+			return;
 		}
 
 		try {
@@ -157,17 +168,19 @@ router.patch(
 			}
 
 			// Update note
-			if (title) {
-				note.title = title;
-			}
+			note.title = title ?? note.title;
+			note.content = content ?? note.content;
+			note.priority = priority ?? note.priority;
 
-			if (content) {
-				note.content = content;
+			if (tags) {
+				let parsedTags = parseTags(tags);
+				note.tags = parsedTags;
 			}
 
 			await notebook.save();
 
 			res.status(200).send("Note patched");
+			return;
 
 		} catch (e) {
 			console.log(e.message);
@@ -175,5 +188,9 @@ router.patch(
 		}
 	}
 );
+
+function parseTags(tagsStr) {
+	return tagsStr.trim().split(",");
+}
 
 module.exports = router;
